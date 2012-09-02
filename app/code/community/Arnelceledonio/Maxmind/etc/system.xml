@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+	<tabs>
+        <arnelceledonio translate="label" module="maxmind">
+            <label><![CDATA[Module by Arnel Celedonio]]></label>
+            <sort_order>200</sort_order>
+        </arnelceledonio>
+	</tabs>	
+
+    <sections>
+		<maxmind translate="label" module="maxmind">
+			<label>Maxmind Fraud Detection</label>
+			<tab>arnelceledonio</tab>
+			<frontend_type>text</frontend_type>
+			<sort_order>0</sort_order>
+			<show_in_default>1</show_in_default>
+			<show_in_website>1</show_in_website>
+			<show_in_store>0</show_in_store>  	
+			<groups>
+				<general translate="label comment">
+						 <label>Maxmind Configuration</label>
+                        <frontend_type>text</frontend_type>
+                        <sort_order>0</sort_order>
+                        <show_in_default>1</show_in_default>
+                        <show_in_website>1</show_in_website>
+                        <show_in_store>1</show_in_store>
+						<fields>
+							<maxmind_licensekey translate="label tooltip comment">
+								<comment><![CDATA[<p>Maxmind License Key</p>]]></comment>
+								<label>License Key</label>
+								<frontend_type>text</frontend_type>
+								<validate>required-entry</validate>
+								<sort_order>0</sort_order>
+								<show_in_default>1</show_in_default>
+								<show_in_website>1</show_in_website>
+								<show_in_store>1</show_in_store>
+							</maxmind_licensekey>						
+											
+								
+							
+							<maxmind_secure translate="label tooltip comment">
+								<comment><![CDATA[<p>Maxmind Secure Recommended - Yes </p>]]></comment>
+								<label>Service Secure</label>
+								 <source_model>adminhtml/system_config_source_yesno</source_model>
+								<frontend_type>select</frontend_type>
+								<validate>required-entry</validate>
+								<sort_order>3</sort_order>
+								<show_in_default>1</show_in_default>
+								<show_in_website>1</show_in_website>
+								<show_in_store>1</show_in_store>
+							</maxmind_secure>	
+							
+							<maxmind_usedns translate="label tooltip comment">
+								<comment><![CDATA[<p>Maxmind Use DNS Recommended - No</p>]]></comment>
+								<label>Use DNS</label>
+								 <source_model>adminhtml/system_config_source_yesno</source_model>
+								<frontend_type>select</frontend_type>
+								<validate>required-entry numeric</validate>
+								<sort_order>4</sort_order>
+								<show_in_default>1</show_in_default>
+								<show_in_website>1</show_in_website>
+								<show_in_store>1</show_in_store>
+							</maxmind_usedns>
+							
+							<maxmind_timeout translate="label tooltip comment">
+								<comment><![CDATA[<p>Maxmind Timeout in Seconds</p>]]></comment>
+								<label>Timeout</label>
+								<frontend_type>text</frontend_type>
+								<validate>required-entry validate-number</validate>
+								<sort_order>5</sort_order>
+								<show_in_default>1</show_in_default>
+								<show_in_website>1</show_in_website>
+								<show_in_store>1</show_in_store>
+							</maxmind_timeout>
+							
+							<maxmind_fraudscore translate="label tooltip comment">
+							   <comment><![CDATA[<p>Minimun Fraud Score to flag orders</p>]]></comment>
+							   <label>Fraud Score</label>
+							   <frontend_type>text</frontend_type>
+							   <validate>required-entry validate-number</validate>
+							   <sort_order>6</sort_order>
+								<show_in_default>1</show_in_default>
+								<show_in_website>1</show_in_website>
+								<show_in_store>1</show_in_store>
+							</maxmind_fraudscore>
+
+						</fields>
+
+				</general>  
+			</groups>
+		</maxmind>
+	</sections>
+	
+</config>	

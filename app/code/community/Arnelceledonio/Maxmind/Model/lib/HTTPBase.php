@@ -19,412 +19,389 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-class HTTPBase{
-  var $server;
-  var $numservers;
-  var $url;
-  var $queries;
-  var $allowed_fields;
-  var $num_allowed_fields;
-  var $outputstr;
-  var $isSecure;
-  var $timeout;
-  var $debug;
-  var $check_field;
-  var $wsIpaddrRefreshTimeout;
-  var $wsIpaddrCacheFile;
-  var $useDNS;
-  var $ipstr;
-  function HTTPBase() {
-    $this->isSecure = 0;
-    $this->debug = 0;
-    $this->timeout = 0;
-    // use countryMatch to validate the results. It is avail in all minfraud answeres
-    $this->check_field = "countryMatch";
-    $this->wsIpaddrRefreshTimeout = 18000;
-    $this->wsIpaddrCacheFile = $this->_getTempDir()."/maxmind.ws.cache";
-    if ($this->debug == 1) {
-      print "wsIpaddrRefreshTimeout: " . $this->wsIpaddrRefreshTimeout . "\n";
-      print "wsIpaddrCacheFile: " . $this->wsIpaddrCacheFile . "\n";
-      print "useDNS: " . $this->useDNS . "\n";
-    }
-  }
+ /**
+  * @property string|array $server The host to use as the server.
+  * @property bool $isSecure Set to true to use secure connection.
+  * @property int $timeout The timeout in seconds to use when connecting to
+  *                        the server
+  * @property string $API_VERSION The version of the API.
+  */
+abstract class HTTPBase
+{
+    /**
+     * Constant to define the version of this
+     * @var string
+     */
+    const API_VERSION = 'PHP/1.60';
 
-  // this function sets the checked field
-  function set_check_field($f) {
-    $check_field = $f;
-  }
+    /**
+     * @var string|array
+     */
+    protected $server = '';
 
-  // this function sets the allowed fields
-  function set_allowed_fields($i) {
-    $this->allowed_fields = $i;
-    $this->num_allowed_fields = count($i);
-  }
+    /**
+     * @var int
+     */
+    protected $numservers = 0;
 
-  //this function queries the servers
-  function query() {
-    //query every server in the list
-    if (!$this->useDNS){
-      $ipstr = $this->readIpAddressFromCache();
-      if ($this->debug == 1){
-        print "using ip addresses, IPs are " . $ipstr . "\n";
-      }
-    }
-    // query every server using its ip address
-    // if there was success reading the ip addresses
-    // from the web or the cache file
-    if ($ipstr) {
-      $ipaddr = explode(";",$ipstr);
-      $numipaddr = count($ipaddr);
-      for ($i = 0;$i < $numipaddr;$i++){
-        $result = $this->querySingleServer($ipaddr[$i]);
-        if ($this->debug == 1) {
-	  print "ip address: " . $ipaddr[$i] . "\n";
-	  print "result: " . $result . "\n";
-	}
-        if ($result) {
-	  return $result;
-	}
-      }
-    }
-    
-    // query every server using its domain name
-    for ($i = 0; $i < $this->numservers; $i++ ) {
-      $result = $this->querySingleServer($this->server[$i]);
-      if ($this->debug == 1) {
-        print "server: " . $this->server[$i] . "\nresult: " . $result . "\n";
-      }
-      if ($result) {
-        return $result;
-      }
-    }
-    return 0;
-  }
+    /**
+     * @var string
+     */
+    protected $url = '';
 
-  // this function takes a input hash and stores it in the hash named queries
-  function input($vars) {
-    $numinputkeys = count($vars);  // get the number of keys in the input hash
-    $inputkeys = array_keys($vars);   // get a array of keys in the input hash
-    for ($i = 0; $i < $numinputkeys; $i++) {
-      $key = $inputkeys[$i];
-      if ($this->allowed_fields[$key] == 1) {
-        //if key is a allowed field then store it in 
-        //the hash named queries
-        $this->queries[$key] = urlencode($this->filter_field($key, $vars[$key]));
-      } else {
-        print "invalid input $key - perhaps misspelled field?";
-	return 0;
-      }
-    }
-    $this->queries["clientAPI"] = $this->API_VERSION;
-  }
+    /**
+     * @var array
+     */
+    protected $queries = array();
 
-  //sub-class should override this if it needs to filter inputs
-  function filter_field($key, $value) {
-    return $value;
-  }
+    /**
+     * @var array
+     */
+    protected $allowed_fields = array();
 
-  //this function returns the output from the server
-  function output() {
-    return $this->outputstr; 
-  }
+    /**
+     * @var int
+     */
+    protected $num_allowed_fields;
 
-  // write the ip Addresses and the time right now to
-  // the cache file
-  function writeIpAddressToCache($filename,$ipstr) {
-    $datetime = time();
-    $fh = fopen($this->wsIpaddrCacheFile,'w');
-    fwrite($fh,$ipstr . "\n");
-    fwrite($fh,$datetime . "\n");
-    fclose($fh);
-    if ($this->debug == 1) {
-      print "writing ip address to cache\n";
-      print "ip str: " . $ipstr . "\n";
-      print "date time: " . $datetime . "\n";
-    }
-  }
-      
-  function readIpAddressFromCache() {
-    // if the cache file exists then
-    // read the ip addresses and the time
-    // IPs were cached
-    if (file_exists($this->wsIpaddrCacheFile)) {
-      $fh = fopen($this->wsIpaddrCacheFile,'r');
-      $ipstr = fgets($fh,1024);
-      $ipstr = rtrim($ipstr);
-      $datetime  = fgets($fh,1024);
-      $datetime = rtrim($datetime);
-      fclose($fh);
-    }
-     
-    // if the ip addresses expired or don't exist then
-    // get them from the web and write 
-    // them to the cache file
-    if (((time() - $datetime) > $this->wsIpaddrRefreshTimeout) | (!$ipstr)) {
-      $tryIpstr = $this->readIpAddressFromWeb();
-      if ($tryIpstr) {
-        $ipstr = $tryIpstr;
-      } else {
-	if ($this->debug == 1){
-	  print "Warning, unable to get ws_ipaddr from www.maxmind.com\n";
+    /**
+     * @var array
+     */
+    protected $outputstr = array();
+
+    /**
+     * @var bool
+     */
+    protected $isSecure = false;
+
+    /**
+     * @var int
+     */
+    protected $timeout = 0;
+
+    /**
+     * @var bool
+     */
+    protected $debug = false;
+
+    /**
+     * Use countryMatch to validate the results.
+     * It is available in all minfraud answers.
+     *
+     * @var string
+     */
+    protected $check_field = 'countryMatch';
+
+    private $curlCaInfo;
+    private $useUtf8;
+
+    /**
+     * Public getter for class properties.
+     *
+     * @param string $key
+     * @return mixed|NULL Returns the property value,
+     *                     or null if it doesn't exist.
+     */
+    public function __get($key)
+    {
+        if (property_exists($this, $key)) {
+            return $this->$key;
         }
-      }
-      // we write to cache whether or not we were able to get $tryIpStr, since
-      // in case DNS goes down, we don't want to check app/ws_ipaddr over and over
-      $this->writeIpAddressToCache($this->wsIpaddrCacheFile,$ipstr);
+        return null;
     }
-    if ($this->debug == 1){
-      print "reading ip address from cache\n";
-      print "ip str: " . $ipstr . "\n";
-      print "date time: " . $datetime . "\n";
-    }
-    //return the ip addresses
-    return $ipstr;     
-  }
 
-  function readIpAddressFromWeb() {
-    //check if the curl module exists
-    $url = "http://www.maxmind.com/app/ws_ipaddr";
-    if (extension_loaded('curl')) {
-      // open curl
-      $ch = curl_init();
-
-      // set curl options
-      curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-      curl_setopt($ch, CURLOPT_URL, $url);
-      curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
-
-      //get the content
-      $content = curl_exec($ch);
-      $content = rtrim($content);
-      if ($this->debug == 1) {
-        print "using curl\n";
-      }
-    } else {
-      // we using HTTP without curl
-
-      // parse the url to get
-      // host, path and query
-      $url3 = parse_url($url);
-      $host = $url3["host"];
-      $path = $url3["path"];
-
-      // open the connection
-      $fp = fsockopen ($host, 80, $errno, $errstr, $this->timeout);
-      if ($fp) {
-        // send the request
-        fputs ($fp, "GET $path HTTP/1.0\nHost: " . $host . "\n\n");
-        while (!feof($fp)) {
-          $buf .= fgets($fp, 128);
+    /**
+     * Public setter.
+     *
+     * @param string $key
+     * @param mixed $val
+     */
+    public function __set($key, $val)
+    {
+        // Only set properties the exist.
+        if (property_exists($this, $key)) {
+            $this->$key = $val;
         }
-        $lines = split("\n", $buf);
-        // get the content
-        $content = $lines[count($lines)-1];
-        //close the connection
-        fclose($fp);
-      }
-      if ($this->debug == 1) {
-        print "using fsockopen\n";
-      }
-    }
-    if ($this->debug == 1) {
-      print "readIpAddressFromWeb found ip addresses: " . $content . "\n";
-    }
-    // TODO fix regexp so that it checks if it only has IP addresses
-    if (ereg ("([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})",$content)) {
-      return $content;
-    } 
-    return "";
-  }
-
-  // this function queries a single server
-  function querySingleServer($server) {
-    // check if we using the Secure HTTPS proctol
-    if ($this->isSecure == 1) {
-      $scheme = "https://";  // Secure HTTPS proctol
-    } else {
-      $scheme = "http://";   // Regular HTTP proctol
     }
 
-    // build a query string from the hash called queries
-    $numquerieskeys = count($this->queries); // get the number of keys in the hash called queries
-    $querieskeys = array_keys($this->queries); // get a array of keys in the hash called queries
-    if ($this->debug == 1) {
-      print "number of query keys " + $numquerieskeys + "\n";
+    /**
+     * Sets the path to the SSL certificate to be used by cURL. If this is
+     * not set, the default certificate is used.
+     *
+     * @param string $cert The path to the certificate to be used by cURL.
+     */
+    public function setCurlCaInfo($cert)
+    {
+        $this->curlCaInfo = $cert;
     }
 
-    $query_string = "";
-
-    for ($i = 0; $i < $numquerieskeys; $i++) {
-      //for each element in the hash called queries 
-      //append the key and value of the element to the query string
-      $key = $querieskeys[$i];
-      $value = $this->queries[$key];
-      //encode the key and value before adding it to the string
-      //$key = urlencode($key);
-      //$value = urlencode($value);
-      if ($this->debug == 1) {
-        print " query key " . $key . " query value " . $value . "\n";
-      }
-      $query_string = $query_string . $key . "=" . $value;
-      if ($i < $numquerieskeys - 1) {
-        $query_string = $query_string . "&";
-      }
+    /**
+     * If set to true, the outputs from the web service call will be converted
+     * from ISO 8859-1 to UTF-8. Defaults to false.
+     *
+     * @param boolean $useUtf8
+     */
+    public function useUtf8($useUtf8)
+    {
+        $this->useUtf8 = $useUtf8;
     }
 
-    $content = "";
+    /**
+     * Sets the checked field.
+     *
+     * @param string $f
+     */
+    public function set_check_field($f)
+    {
+        $this->check_field = $f;
+    }
 
-    //check if the curl module exists
-    if (extension_loaded('curl')) {
-      //use curl
-      if ($this->debug == 1) {
-        print "using curl\n";
-      }
+    /**
+     * Set the allowed fields.
+     *
+     * @param array $i
+     */
+    public function set_allowed_fields($i)
+    {
+        $this->allowed_fields     = $i;
+        $this->num_allowed_fields = count($i);
+    }
 
-      //open curl
-      $ch = curl_init();
+    /**
+     * Query each server.
+     *
+     * @return false|string
+     */
+    public function query()
+    {
+        // Query every server using it's domain name.
+        for ($i = 0; $i < $this->numservers; $i++) {
+            $result = $this->querySingleServer($this->server[$i]);
+            if ($this->debug) {
+                echo "server: {$this->server[$i]}\n";
+                echo "result: $result\n";
+            }
 
-      $url = $scheme . $server . "/" . $this->url;
+            if ($result) {
+                return $result;
+            }
+        }
+        return false;
+    }
 
-      //set curl options
-      if ($this->debug == 1){
-        print "url " . $url . "\n";
-      }
-      curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-      curl_setopt($ch, CURLOPT_URL, $url);
-      curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
-      curl_setopt($ch, CURLOPT_SSL_VERIFYHOST,0);
+    /**
+     * Validates and stores the inputVars in the queries array.
+     *
+     * @param $inputVars
+     */
+    public function input($inputVars)
+    {
+        foreach ($inputVars as $key => $val) {
+            if (empty($this->allowed_fields[$key])) {
+                echo "Invalid input $key - perhaps misspelled field?\n";
+                return false;
+            }
+            $this->queries[$key] = urlencode($this->filter_field($key, $val));
+        }
+        $this->queries['clientAPI'] = self::API_VERSION;
+    }
 
-      //this option lets you store the result in a string 
-      curl_setopt($ch, CURLOPT_POST,          1);
-      curl_setopt($ch, CURLOPT_POSTFIELDS,    $query_string);
+    /**
+     * Child classes should override this if it needs to filter inputs.
+     *
+     * @param string $key
+     * @param string $value
+     * @return string
+     */
+    public function filter_field($key, $value)
+    {
+        return $value;
+    }
 
-      //get the content
-      $content = curl_exec($ch);
+    /**
+     * Return the output from the server.
+     *
+     * @return array
+     */
+    public function output()
+    {
+        return $this->outputstr;
+    }
 
-      // For some reason curl_errno returns an error even when function works
-      // Until we figure this out, will ignore curl errors - (not good i know)
-//      $e = curl_errno($ch);//get error or sucess
+    /**
+     * Queries a single server. Returns true if the query was successful,
+     * otherwise false.
+     *
+     * @param string $server
+     * @return bool
+     */
+    public function querySingleServer($server)
+    {
+        // Check if we using the Secure HTTPS proctol.
+        $scheme = $this->isSecure ? 'https://' : 'http://';
 
-//      if (($e == 1) & ($this->isSecure == 1)) {
-        // HTTPS does not work print error message
-//          print "error: this version of curl does not support HTTPS try build curl with SSL or specify \$ccfs->isSecure = 0\n";
-//      }
-//      if ($e > 0) {
-        //we get a error msg print it
-//        print "Received error message $e from curl: " . curl_error($ch) . "\n";
-//	return 0;
-//      }
-      //close curl
-      curl_close($ch);
-    } else {
-      //curl does not exist
-      //use the fsockopen function, 
-      //the fgets function and the fclose function
-      if ($this->debug == 1) {
-        print "using fsockopen for querySingleServer\n";
-      }
+        // Build a query string from the queries array.
+        $numQueries = count($this->queries);
+        $queryKeys  = array_keys($this->queries);
+        if ($this->debug) {
+            echo "Number of query keys {$numQueries}\n";
+        }
 
-      $url = $scheme . $server . "/" . $this->url . "?" . $query_string;
-      if ($this->debug == 1) {
-        print "url " . $url . " " . "\n";
-      }
+        $queryString = '';
 
-      //now check if we are using regular HTTP
-      if ($this->isSecure == 0) {
-        //we using regular HTTP
+        for ($i = 0; $i < $numQueries; $i++) {
+            /**
+             * For each element in the array, append the key
+             * and value of the element to the query string.
+             */
+            $key   = $queryKeys[$i];
+            $value = $this->queries[$key];
 
-        //parse the url to get
-        //host, path and query
-        $url3 = parse_url($url);
-        $host = $url3["host"];
-        $path = $url3["path"];
-	$query =  $url3["query"];
+            if ($this->debug) {
+                echo " query key {$key} query value {$value}\n";
+            }
 
-        //open the connection
-        $fp = fsockopen ($host, 80, $errno, $errstr, $this->timeout);
-        if ($fp) {
-          //send the request
-          $post = "POST $path HTTP/1.0\nHost: " . $host . "\nContent-type: application/x-www-form-urlencoded\nUser-Agent: Mozilla 4.0\nContent-length: " . strlen($query) . "\nConnection: close\n\n$query";
-          fputs ($fp, $post);
-          while (!feof($fp)) {
-            $buf .= fgets($fp, 128);
-          }
-          $lines = split("\n", $buf);
-          // get the content
-          $content = $lines[count($lines)-1];
-          //close the connection
-          fclose($fp);
+            $queryString .= $key . '=' . $value;
+            if ($i < $numQueries - 1) {
+                $queryString .= '&';
+            }
+        }
+
+        $url     = $scheme . $server . "/" . $this->url;
+
+        // Check if the curl module exists.
+        if (extension_loaded('curl')) {
+            // Use curl.
+            if ($this->debug) {
+                echo "Using curl\n";
+            }
+
+            // Open curl.
+            $ch = curl_init();
+
+            // Set curl options
+            if ($this->debug) {
+                echo "url {$url}\n";
+            }
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+
+            if ($this->curlCaInfo) {
+                curl_setopt($ch, CURLOPT_CAINFO, $this->curlCaInfo);
+            }
+
+            // This option lets you store the result in a string.
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $queryString);
+
+            // Get the content.
+            $content = curl_exec($ch);
+
+            curl_close($ch);
         } else {
-	  return 0;
-	}
-      } else {
-        //secure HTTPS requires CURL
-        print "error: you need to install curl if you want secure HTTPS or specify the variable to be $ccfs->isSecure = 0";
-        return 0;
-      }
+            /**
+             * The curl extension is not loaded.
+             * Use the fsockopen, fgets, and fclose functions.
+             */
+            if ($this->debug) {
+                echo "Using fsockopen for querySingleServer\n";
+            }
+
+            $url .= "?{$queryString}";
+            if ($this->debug) {
+                echo "url {$url}\n";
+            }
+
+            // Check if we are using regular HTTP.
+            if ($this->isSecure == false) {
+                //parse the url to get host, path and query.
+                $url3  = parse_url($url);
+                $host  = $url3["host"];
+                $path  = $url3["path"];
+                $query = $url3["query"];
+
+                // Open the connection.
+                $fp = fsockopen($host, 80, $errno, $errstr, $this->timeout);
+
+                // There was a problem opening the connection.
+                if (!$fp) {
+                    return false;
+                }
+
+                // Send the request.
+                $post = "POST $path HTTP/1.0\n"
+                      . "Host: {$host}\n"
+                      . "Content-type: application/x-www-form-urlencoded\n"
+                      . "User-Agent: Mozilla 4.0\n"
+                      . "Content-length: "
+                      .     strlen($query)
+                      . "\nConnection: close\n\n"
+                      . $query;
+
+                fputs($fp, $post);
+                $buf = '';
+                while (!feof($fp)) {
+                    $buf .= fgets($fp, 128);
+                }
+                $lines = explode("\n", $buf);
+
+                // Get the content.
+                $content = $lines[count($lines) - 1];
+
+                // Close the connection.
+                fclose($fp);
+            } else {
+                // Secure HTTPS requires CURL
+                echo 'Error: you need to install curl if you want secure HTTPS '
+                   . 'or specify the variable to be $ccfs->isSecure = false';
+                return false;
+            }
+        }
+
+        if ($this->debug) {
+            echo "content = {$content}\n";
+        }
+
+        if (empty($content)) {
+            echo "Returned content is empty!\n";
+            return false;
+        }
+
+        if ($this->useUtf8) {
+            $content = utf8_encode($content);
+        }
+
+        /**
+         * Get the keys and values from the string content
+         * and store them in the outputstr array.
+         */
+
+        // Split content into pairs containing both the key and the value.
+        $keyValuePairs = explode(';', $content);
+
+        // Get the number of key and value pairs.
+        $numKeyValuePairs = count($keyValuePairs);
+
+        // For each pair store key and value into the outputstr array.
+        $this->outputstr = array();
+        for ($i = 0; $i < $numKeyValuePairs; $i++) {
+            // Split the pair into a key and a value.
+            list($key, $value) = explode('=', $keyValuePairs[$i]);
+            if ($this->debug) {
+                echo " output {$key} = {$value}\n";
+            }
+
+            $this->outputstr[$key] = $value;
+        }
+
+        // One other way to do it.
+        if (!array_key_exists($this->check_field, $this->outputstr)) {
+            return false;
+        }
+
+        return true;
     }
-
-    if ($this->debug == 1) {
-      print "content = " . $content . "\n";
-    }
-    // get the keys and values from
-    // the string content and store them
-    // the hash named outputstr
-
-    // split content into pairs containing both 
-    // the key and the value
-    $keyvaluepairs = explode(";",$content);
-
-    //get the number of key and value pairs
-    $numkeyvaluepairs = count($keyvaluepairs);
-
-    //for each pair store key and value into the
-    //hash named outputstr
-    $this->outputstr = array();
-    for ($i = 0; $i < $numkeyvaluepairs; $i++) {
-      //split the pair into a key and a value
-      list($key,$value) = explode("=",$keyvaluepairs[$i]);
-      if ($this->debug == 1) {
-        print " output " . $key . " = " . $value . "\n";
-      }
-      //store the key and the value into the
-      //hash named outputstr
-      $this->outputstr[$key] = $value;
-    }
-    //one other way to do it
-    if (!array_key_exists($this->check_field,$this->outputstr)) {
-      return 0;
-    }
-    return 1;
-  }
-
-  function _getTempDir() {
-    if (ini_get('upload_tmp_dir')) {
-      return ini_get('upload_tmp_dir');
-    }
-
-    if (substr(PHP_OS, 0, 3) != 'WIN') {
-      return '/tmp';
-    }
-
-    if (isset($_ENV['TMP'])) {
-      return $_ENV['TMP'];
-    }
-
-    if (isset($_ENV['TEMP'])) {
-      return $_ENV['TEMP'];
-    }
-
-    if (is_dir('c:\\windows\\temp')) {
-      return 'c:\\windows\\temp';
-    }
-
-    if (is_dir('c:\\winnt\\temp')) {
-      return 'c:\\winnt\\temp';
-    }
-
-    return '.';
-  }
 }
-?>
